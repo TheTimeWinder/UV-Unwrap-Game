@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UV Unwrapper Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* SLEEK SIDEBAR */
+        #sidebar { position: absolute; top: 0; left: 0; width: 320px; height: 100vh; background-color: #2a2a2a; padding: 25px; box-sizing: border-box; display: flex; flex-direction: column; box-shadow: 4px 0 15px rgba(0,0,0,0.5); z-index: 10; }
+        .title { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #4CAF50; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+        .instructions { color: #bbb; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+        
+        /* LEVEL SELECTOR */
+        #levelSelector { margin-bottom: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .lvl-btn { width: 40px; height: 40px; font-size: 16px; background-color: #444; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .lvl-btn.active { background-color: #2196F3; box-shadow: 0 0 8px #2196F3; border: 2px solid white; }
+        .lvl-btn.locked { background-color: #222; color: #555; cursor: not-allowed; }
+        .lvl-btn.unlocked:not(.active):hover { background-color: #4CAF50; }
+
+        /* PROGRESS TRACKER */
+        .progress-box { background: #111; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333; }
+        .progress-text { display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; color: #ddd; }
+        .progress-subtext { color: #888; font-size: 12px; margin-top: 5px; }
+
+        /* ACTION BUTTONS */
+        .action-btn { padding: 15px; font-size: 16px; border: none; border-radius: 8px; font-weight: bold; transition: 0.3s; margin-top: 10px; width: 100%; letter-spacing: 1px; cursor: pointer; }
+        #unwrapBtn { background-color: #555; color: #888; cursor: not-allowed; margin-top: auto; }
+        #unwrapBtn.ready { background-color: #4CAF50; color: white; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4); }
+        #unwrapBtn.ready:hover { background-color: #45a049; transform: translateY(-2px); }
+        
+        #clearBtn { background-color: #f44336; color: white; }
+        #clearBtn:hover { background-color: #d32f2f; }
+
+        /* NOTIFICATIONS & FX OVERLAYS */
+        #toast { position: absolute; bottom: 30px; left: calc(50% + 160px); transform: translateX(-50%); background: #f44336; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        #flashOverlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: white; z-index: 500; opacity: 0; pointer-events: none; }
+
+        /* SUCCESS MODAL */
+        #successModal { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.9); z-index: 200; flex-direction: column; justify-content: center; align-items: center; }
+        #successModal.show { display: flex !important; }
+        #successModal h2 { color: #4CAF50; font-size: 42px; margin-bottom: 10px; text-shadow: 0 0 15px rgba(76, 175, 80, 0.5); z-index: 210; }
+        #successModal p { color: #ccc; margin-bottom: 25px; font-size: 18px; z-index: 210; }
+        canvas { background-color: #222; border: 2px solid #555; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 210; }
+        
+        .modal-controls { display: flex; gap: 15px; z-index: 210; }
+        .modal-btn { background-color: #555; color: white; padding: 12px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .modal-btn:hover { background-color: #666; }
+        #nextLevelBtn { background-color: #2196F3; display: none; }
+        #nextLevelBtn:hover { background-color: #1e88e5; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+    
+    <div id="flashOverlay"></div>
+    <div id="toast">Error Message Here</div>
+
+    <div id="sidebar">
+        <div class="title" id="levelTitle">Level 1</div>
+        <div id="levelSelector"></div>
+        <p class="instructions">Click and drag to rotate the camera. Scroll to zoom.<br><br>Click the white edges to cut a seam. Cut exactly the required amount of seams to unfold the shape completely flat!</p>
+        
+        <div class="progress-box">
+            <div class="progress-text">
+                <span>Seams Cut:</span>
+                <span style="color: #2196F3;"><span id="seamCount">0</span> / <span id="reqSeams">0</span></span>
+            </div>
+            <div class="progress-subtext" id="statusText">Cut more seams.</div>
+        </div>
+        
+        <button id="unwrapBtn" class="action-btn" disabled>UNWRAP SHAPE</button>
+        <button id="clearBtn" class="action-btn">CLEAR SELECTION</button>
+    </div>
+
+    <div id="successModal">
+        <h2>PERFECT UNFOLD!</h2>
+        <p>Your seams formed a valid, flat 2D net.</p>
+        <canvas id="netCanvas" width="600" height="500"></canvas>
+        <div class="modal-controls">
+            <button class="modal-btn" id="closeModalBtn">Reset Shape</button>
+            <button class="modal-btn" id="nextLevelBtn">Next Level >></button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. CORE ENGINE SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        camera.position.z = 5; 
+        camera.position.x = -1; 
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.dampingFactor = 0.05;
+        controls.minDistance = 3; controls.maxDistance = 10; controls.enablePan = false;
+        controls.target.set(-1, 0, 0);
+
+        // --- 2. LEVEL GEOMETRY & GRAPH SEAM STRUCTS ---
+        const GAME_LEVELS = [
+            {
+                name: "The Cube",
+                getGeometry: () => new THREE.BoxGeometry(2, 2, 2),
+                threshold: 15,
+                faces: [
+                    { id: 0, type: 'square', edges: { 0:[0,1,1], 1:[1,0,1], 2:[0,-1,1], 3:[-1,0,1] } },
+                    { id: 1, type: 'square', edges: { 0:[0,1,-1], 1:[-1,0,-1], 2:[0,-1,-1], 3:[1,0,-1] } },
+                    { id: 2, type: 'square', edges: { 0:[1,1,0], 1:[1,0,-1], 2:[1,-1,0], 3:[1,0,1] } },
+                    { id: 3, type: 'square', edges: { 0:[-1,1,0], 1:[-1,0,1], 2:[-1,-1,0], 3:[-1,0,-1] } },
+                    { id: 4, type: 'square', edges: { 0:[0,1,-1], 1:[1,1,0], 2:[0,1,1], 3:[-1,1,0] } },
+                    { id: 5, type: 'square', edges: { 0:[0,-1,1], 1:[1,-1,0], 2:[0,-1,-1], 3:[-1,-1,0] } }
+                ]
+            },
+            {
+                name: "The Pyramid",
+                getGeometry: () => {
+                    const geom = new THREE.BufferGeometry();
+                    const vertices = new Float32Array([ 0,1,0, -1,-1,1, 1,-1,1, 1,-1,-1, -1,-1,-1 ]);
+                    geom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                    geom.setIndex([1,2,0, 2,3,0, 3,4,0, 4,1,0, 1,3,2, 1,4,3]);
+                    geom.computeVertexNormals();
+                    return geom;
+                },
+                threshold: 15, 
+                faces: [
+                    { id: 0, type: 'square', edges: { 0:[0,-1,1], 1:[1,-1,0], 2:[0,-1,-1], 3:[-1,-1,0] }},
+                    { id: 1, type: 'triangle', edges: { 2:[0,-1,1], 1:[0.5,0,0.5], 3:[-0.5,0,0.5] }},
+                    { id: 2, type: 'triangle', edges: { 2:[1,-1,0], 1:[0.5,0,-0.5], 3:[0.5,0,0.5] }},
+                    { id: 3, type: 'triangle', edges: { 2:[0,-1,-1], 1:[-0.5,0,-0.5], 3:[0.5,0,-0.5] }},
+                    { id: 4, type: 'triangle', edges: { 2:[-1,-1,0], 1:[-0.5,0,0.5], 3:[-0.5,0,-0.5] }}
+                ]
+            },
+            {
+                name: "The Cylinder",
+                getGeometry: () => {
+                    const N = 6; const R = 1; const H = 1;
+                    const topV = [], botV = [];
+                    for(let i=0; i<N; i++) {
+                        const a = (i/N) * Math.PI * 2;
+                        topV.push([Math.cos(a)*R, H, Math.sin(a)*R]);
+                        botV.push([Math.cos(a)*R, -H, Math.sin(a)*R]);
+                    }
+                    const topC = [0, H, 0]; const botC = [0, -H, 0];
+                    const geom = new THREE.BufferGeometry();
+                    const verts = [], indices = [];
+                    topV.forEach(v => verts.push(...v)); botV.forEach(v => verts.push(...v)); verts.push(...topC, ...botC); 
+                    const tc = 12, bc = 13;
+                    for(let i=0; i<N; i++) {
+                        indices.push(tc, (i+1)%N, i); indices.push(bc, i+N, (i+1)%N+N); 
+                        const t1=i, t2=(i+1)%N, b1=i+N, b2=(i+1)%N+N; indices.push(t1, t2, b2, t1, b2, b1); 
+                    }
+                    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+                    geom.setIndex(indices); geom.computeVertexNormals(); return geom;
+                },
+                getExtraVisualLines: () => {
+                    const N = 6; const R = 1; const H = 1; const lines = []; const topC = [0, H, 0]; const botC = [0, -H, 0];
+                    for(let i=0; i<N; i++) {
+                        const a = (i/N) * Math.PI * 2;
+                        lines.push([[Math.cos(a)*R, H, Math.sin(a)*R], topC]);
+                        lines.push([[Math.cos(a)*R, -H, Math.sin(a)*R], botC]);
+                    }
+                    return lines;
+                },
+                threshold: 15,
+                faces: (function() {
+                    const N = 6; const R = 1; const H = 1; const topV = [], botV = [];
+                    for(let i=0; i<N; i++) {
+                        const a = (i/N) * Math.PI * 2;
+                        topV.push([Math.cos(a)*R, H, Math.sin(a)*R]); botV.push([Math.cos(a)*R, -H, Math.sin(a)*R]);
+                    }
+                    const mid = (p1,p2) => [(p1[0]+p2[0])/2, (p1[1]+p2[1])/2, (p1[2]+p2[2])/2];
+                    const faces = []; const topE = {}, botE = {};
+                    for(let i=0; i<N; i++) { topE[i] = mid(topV[i], topV[(i+1)%N]); botE[i] = mid(botV[(i+1)%N], botV[i]); }
+                    const botE_shifted = {}; for(let i=0; i<N; i++) botE_shifted[(i+3)%N] = botE[i];
+                    
+                    faces.push({ id: 0, type: 'hexagon', edges: topE });
+                    faces.push({ id: 1, type: 'hexagon', edges: botE_shifted }); 
+                    
+                    for(let i=0; i<N; i++) {
+                        faces.push({
+                            id: i+2, type: 'square',
+                            edges: { 0: topE[i], 3: mid(topV[(i+1)%N], botV[(i+1)%N]), 2: botE[i], 1: mid(botV[i], topV[i]) }
+                        });
+                    }
+                    return faces;
+                })()
+            }
+        ];
+
+        // --- 3. STATE ENGINE CONFIG ---
+        let currentLevelIndex = 0; 
+        let highestUnlockedLevel = 0;
+        let currentLevelGroup = null; 
+        let currentShapeMesh = null; 
+        let interactableEdges = []; 
+        let visualOnlyEdges = []; 
+        let seamsPlaced = 0; 
+        let requiredSeams = 0;
+        let graph = {}; 
+        let edgeList = []; 
+
+        // --- 4. RUNTIME SYSTEM ACTIONS ---
+        function showToast(msg, color = '#f44336') {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.style.backgroundColor = color;
+            t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000);
+        }
+
+        function updateUI() {
+            document.getElementById('seamCount').innerText = seamsPlaced;
+            const btn = document.getElementById('unwrapBtn');
+            const status = document.getElementById('statusText');
+            
+            if (seamsPlaced === requiredSeams) {
+                btn.disabled = false; 
+                btn.classList.add('ready');
+                status.innerText = "Shape ready to unfold!"; 
+                status.style.color = "#4CAF50";
+            } else if (seamsPlaced > requiredSeams) {
+                btn.disabled = true; 
+                btn.classList.remove('ready');
+                status.innerText = "Too many seams! The mesh will shatter."; 
+                status.style.color = "#f44336";
+            } else {
+                btn.disabled = true; 
+                btn.classList.remove('ready');
+                status.innerText = `Cut ${requiredSeams - seamsPlaced} more seams.`; 
+                status.style.color = "#888";
+            }
+        }
+
+        function renderLevelSelector() {
+            const container = document.getElementById('levelSelector');
+            container.innerHTML = '';
+            GAME_LEVELS.forEach((level, index) => {
+                const btn = document.createElement('button');
+                btn.innerText = index + 1; btn.className = 'lvl-btn';
+                if (index === currentLevelIndex) btn.classList.add('active');
+                else if (index <= highestUnlockedLevel) { btn.classList.add('unlocked'); btn.onclick = () => loadLevel(index); }
+                else btn.classList.add('locked');
+                container.appendChild(btn);
+            });
+            document.getElementById('levelTitle').innerText = `Level ${currentLevelIndex + 1}: ${GAME_LEVELS[currentLevelIndex].name}`;
+        }
+
+        function loadLevel(index) {
+            currentLevelIndex = index; const levelData = GAME_LEVELS[index];
+
+            if (currentLevelGroup) { scene.remove(currentLevelGroup); }
+            if (currentShapeMesh) { currentShapeMesh.geometry.dispose(); currentShapeMesh.material.dispose(); }
+            interactableEdges.forEach(edge => {
+                edge.geometry.dispose(); edge.material.dispose();
+                edge.userData.visualMesh.geometry.dispose(); edge.userData.visualMesh.material.dispose();
+            });
+            visualOnlyEdges.forEach(mesh => { mesh.geometry.dispose(); mesh.material.dispose(); });
+            
+            interactableEdges = []; visualOnlyEdges = []; seamsPlaced = 0; graph = {}; edgeList = [];
+            
+            currentLevelGroup = new THREE.Group();
+            currentLevelGroup.position.set(-1, 0, 0); 
+            scene.add(currentLevelGroup);
+
+            levelData.faces.forEach(face => {
+                graph[face.id] = {};
+                for (const localDir in face.edges) {
+                    const ep = face.edges[localDir];
+                    let matchedId = -1;
+                    for (let i=0; i<edgeList.length; i++) {
+                        const dist = (edgeList[i].pos[0]-ep[0])**2 + (edgeList[i].pos[1]-ep[1])**2 + (edgeList[i].pos[2]-ep[2])**2;
+                        if (dist < 0.0001) { matchedId = edgeList[i].id; break; }
+                    }
+                    if (matchedId === -1) { matchedId = edgeList.length; edgeList.push({ id: matchedId, pos: ep }); }
+                    graph[face.id][localDir] = { edgeIndex: matchedId, edgePos: ep };
+                }
+            });
+
+            levelData.faces.forEach(face => {
+                for (const localDir in graph[face.id]) {
+                    const myEdge = graph[face.id][localDir];
+                    levelData.faces.forEach(otherFace => {
+                        if(face.id === otherFace.id) return;
+                        for (const otherDir in graph[otherFace.id]) {
+                            if(myEdge.edgeIndex === graph[otherFace.id][otherDir].edgeIndex) {
+                                myEdge.neighbor = otherFace.id; myEdge.neighborLocalDir = parseInt(otherDir);
+                            }
+                        }
+                    });
+                }
+            });
+
+            requiredSeams = edgeList.length - (levelData.faces.length - 1);
+            document.getElementById('reqSeams').innerText = requiredSeams;
+            
+            const geom = levelData.getGeometry();
+            currentShapeMesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.95 }));
+            currentLevelGroup.add(currentShapeMesh);
+
+            const edgesGeom = new THREE.EdgesGeometry(geom, levelData.threshold);
+            const posAttr = edgesGeom.attributes.position;
+            
+            for (let i = 0; i < posAttr.count; i += 2) {
+                const v1 = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+                const v2 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 1);
+                const distance = v1.distanceTo(v2);
+                const midpoint = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5);
+                
+                let matchedId = -1; let bestDist = Infinity;
+                for (let e=0; e<edgeList.length; e++) {
+                    const ep = edgeList[e].pos;
+                    const dist = (ep[0]-midpoint.x)**2 + (ep[1]-midpoint.y)**2 + (ep[2]-midpoint.z)**2;
+                    if (dist < bestDist) { bestDist = dist; matchedId = edgeList[e].id; }
+                }
+
+                const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), v2.clone().sub(v1).normalize());
+                const visualEdge = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, distance, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                visualEdge.position.copy(midpoint); visualEdge.quaternion.copy(quaternion); 
+                currentLevelGroup.add(visualEdge);
+
+                const hitboxEdge = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, distance, 8), new THREE.MeshBasicMaterial({ visible: false }));
+                hitboxEdge.position.copy(midpoint); hitboxEdge.quaternion.copy(quaternion);
+                hitboxEdge.userData = { id: matchedId, isSeam: false, visualMesh: visualEdge };
+                
+                currentLevelGroup.add(hitboxEdge); interactableEdges.push(hitboxEdge);
+            }
+
+            if (levelData.getExtraVisualLines) {
+                const lines = levelData.getExtraVisualLines();
+                const visualMat = new THREE.MeshBasicMaterial({ color: 0x777777 }); 
+                lines.forEach(line => {
+                    const v1 = new THREE.Vector3(...line[0]);
+                    const v2 = new THREE.Vector3(...line[1]);
+                    const distance = v1.distanceTo(v2);
+                    const midpoint = v1.clone().lerp(v2, 0.5);
+                    const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), v2.clone().sub(v1).normalize());
+                    
+                    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, distance, 8), visualMat);
+                    mesh.position.copy(midpoint); mesh.quaternion.copy(quaternion);
+                    currentLevelGroup.add(mesh); visualOnlyEdges.push(mesh);
+                });
+            }
+
+            updateUI(); renderLevelSelector();
+        }
+
+        // --- 5. POINTER RAYCAST INTERACTION ---
+        const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+        let isDragging = false; let pX = 0; let pY = 0;
+        window.addEventListener('pointerdown', (e) => { isDragging = false; pX = e.clientX; pY = e.clientY; });
+        window.addEventListener('pointermove', (e) => { if (Math.abs(e.clientX - pX) > 3 || Math.abs(e.clientY - pY) > 3) isDragging = true; });
+        
+        window.addEventListener('pointerup', (e) => {
+            if (e.target.tagName === 'BUTTON' || isDragging) return; 
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactableEdges);
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                hit.userData.isSeam = !hit.userData.isSeam;
+                hit.userData.visualMesh.material.color.setHex(hit.userData.isSeam ? 0xff3333 : 0xffffff);
+                seamsPlaced += hit.userData.isSeam ? 1 : -1;
+                updateUI();
+            }
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            interactableEdges.forEach(edge => {
+                edge.userData.isSeam = false;
+                edge.userData.visualMesh.material.color.setHex(0xffffff);
+            });
+            seamsPlaced = 0;
+            updateUI();
+        });
+
+        // --- 6. 2D SURFACE LAYOUT ALGORITHMS ---
+        const H_Y = 1.732051;
+        const localFaces2D = {
+            'square': {
+                vertices: [ {x:1, y:1}, {x:-1, y:1}, {x:-1, y:-1}, {x:1, y:-1} ],
+                edges: { 0:[{x:1,y:1},{x:-1,y:1}], 3:[{x:-1,y:1},{x:-1,y:-1}], 2:[{x:-1,y:-1},{x:1,y:-1}], 1:[{x:1,y:-1},{x:1,y:1}] }
+            },
+            'triangle': {
+                vertices: [ {x:-1, y:-1}, {x:1, y:-1}, {x:0, y:1.236068} ],
+                edges: { 2:[{x:-1,y:-1},{x:1,y:-1}], 1:[{x:1,y:-1},{x:0,y:1.236068}], 3:[{x:0,y:1.236068},{x:-1,y:-1}] }
+            },
+            'hexagon': {
+                vertices: [ {x:-1, y:-H_Y}, {x:1, y:-H_Y}, {x:2, y:0}, {x:1, y:H_Y}, {x:-1, y:H_Y}, {x:-2, y:0} ],
+                edges: { 0:[{x:-1,y:-H_Y}, {x:1,y:-H_Y}], 1:[{x:1,y:-H_Y}, {x:2,y:0}], 2:[{x:2,y:0}, {x:1,y:H_Y}], 3:[{x:1,y:H_Y}, {x:-1,y:H_Y}], 4:[{x:-1,y:H_Y}, {x:-2,y:0}], 5:[{x:-2,y:0}, {x:-1,y:-H_Y}] }
+            }
+        };
+
+        function transformPoint(pt, q1, q2, p1, p2) {
+            const vecQ = { x: q2.x - q1.x, y: q2.y - q1.y }; const vecP = { x: p1.x - p2.x, y: p1.y - p2.y };
+            const rot = Math.atan2(vecP.y, vecP.x) - Math.atan2(vecQ.y, vecQ.x);
+            let nx = pt.x - q1.x; let ny = pt.y - q1.y;
+            return { x: (nx * Math.cos(rot) - ny * Math.sin(rot)) + p2.x, y: (nx * Math.sin(rot) + ny * Math.cos(rot)) + p2.y };
+        }
+
+        function doPolygonsOverlap(polyA, polyB) {
+            const eps = 1e-4; const distSq = (a, b) => (a.x-b.x)**2 + (a.y-b.y)**2;
+            const ccw = (A,B,C) => (C.y-A.y)*(B.x-A.x) > (B.y-A.y)*(C.x-A.x);
+            for(let i=0; i<polyA.length; i++) {
+                let a1 = polyA[i], a2 = polyA[(i+1)%polyA.length];
+                for(let j=0; j<polyB.length; j++) {
+                    let b1 = polyB[j], b2 = polyB[(j+1)%polyB.length];
+                    if (distSq(a1, b1) < eps || distSq(a1, b2) < eps || distSq(a2, b1) < eps || distSq(a2, b2) < eps) continue;
+                    if ((ccw(a1,b1,b2) !== ccw(a2,b1,b2)) && (ccw(a1,a2,b1) !== ccw(a1,a2,b2))) return true;
+                }
+            }
+            let cx = 0, cy = 0; polyA.forEach(p => { cx+=p.x; cy+=p.y }); let centerA = { x: cx/polyA.length, y: cy/polyA.length };
+            let inside = false;
+            for (let i = 0, j = polyB.length - 1; i < polyB.length; j = i++) {
+                if (((polyB[i].y > centerA.y) !== (polyB[j].y > centerA.y)) && (centerA.x < (polyB[j].x - polyB[i].x) * (centerA.y - polyB[i].y) / (polyB[j].y - polyB[i].y) + polyB[i].x)) inside = !inside;
+            }
+            return inside;
+        }
+
+        function drawDynamicNet(layoutCoords) {
+            const canvas = document.getElementById('netCanvas'); const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            layoutCoords.forEach(face => { face.vertices.forEach(v => {
+                if(v.x < minX) minX = v.x; if(v.y < minY) minY = v.y;
+                if(v.x > maxX) maxX = v.x; if(v.y > maxY) maxY = v.y;
+            });});
+
+            const w = maxX - minX; const h = maxY - minY; const padding = 40;
+            const scale = Math.min((canvas.width - padding*2) / w, (canvas.height - padding*2) / h);
+            const offsetX = (canvas.width - (w * scale)) / 2; const offsetY = (canvas.height - (h * scale)) / 2;
+
+            ctx.fillStyle = "#2196F3"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+            layoutCoords.forEach(face => {
+                ctx.beginPath();
+                face.vertices.forEach((v, idx) => {
+                    let sx = offsetX + (v.x - minX) * scale; let sy = offsetY + (v.y - minY) * scale;
+                    if (idx === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+                });
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+                
+                if (face.vertices.length > 4) {
+                    let cx = 0, cy = 0; face.vertices.forEach(v => { cx+=v.x; cy+=v.y; });
+                    cx /= face.vertices.length; cy /= face.vertices.length;
+                    ctx.beginPath(); ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                    face.vertices.forEach(v => {
+                        ctx.moveTo(offsetX + (cx - minX) * scale, offsetY + (cy - minY) * scale);
+                        ctx.lineTo(offsetX + (v.x - minX) * scale, offsetY + (v.y - minY) * scale);
+                    });
+                    ctx.stroke();
+                }
+            });
+        }
+
+        // --- 7. EVALUATION LOGIC & EVOLUTION VISUAL EFFECTS ---
+        document.getElementById('unwrapBtn').addEventListener('click', () => {
+            if (document.getElementById('unwrapBtn').disabled) return;
+            const levelData = GAME_LEVELS[currentLevelIndex];
+            const isSeamMap = {}; interactableEdges.forEach(e => isSeamMap[e.userData.id] = e.userData.isSeam);
+
+            const visitedFaces = new Set([0]); const layoutCoords = []; let hasOverlap = false;
+            const rootType = levelData.faces[0].type;
+            const rootVertices = localFaces2D[rootType].vertices.map(pt => ({x: pt.x, y: pt.y}));
+            const rootEdges = {}; for(let dir in localFaces2D[rootType].edges) rootEdges[dir] = localFaces2D[rootType].edges[dir].map(pt => ({x: pt.x, y: pt.y}));
+            
+            layoutCoords.push({ vertices: rootVertices }); const queue = [{ face: 0, globalEdges: rootEdges }];
+
+            while(queue.length > 0) {
+                const curr = queue.shift();
+                for (let localDir in curr.globalEdges) {
+                    const connection = graph[curr.face][localDir];
+                    if (!connection || isSeamMap[connection.edgeIndex]) continue;
+
+                    if (!visitedFaces.has(connection.neighbor)) {
+                        const p1 = curr.globalEdges[localDir][0]; const p2 = curr.globalEdges[localDir][1];
+                        const neighborType = levelData.faces[connection.neighbor].type;
+                        const nLocalEdge = localFaces2D[neighborType].edges[connection.neighborLocalDir];
+                        
+                        const newGlobalVertices = localFaces2D[neighborType].vertices.map(pt => transformPoint(pt, nLocalEdge[0], nLocalEdge[1], p1, p2));
+                        layoutCoords.forEach(existingFace => { if (doPolygonsOverlap(newGlobalVertices, existingFace.vertices)) hasOverlap = true; });
+
+                        const newGlobalEdges = {};
+                        for(let d in localFaces2D[neighborType].edges) { newGlobalEdges[d] = localFaces2D[neighborType].edges[d].map(pt => transformPoint(pt, nLocalEdge[0], nLocalEdge[1], p1, p2)); }
+
+                        visitedFaces.add(connection.neighbor); layoutCoords.push({ vertices: newGlobalVertices });
+                        queue.push({ face: connection.neighbor, globalEdges: newGlobalEdges });
+                    }
+                }
+            }
+
+            if (visitedFaces.size < levelData.faces.length) {
+                showToast("The mesh shattered! You left pieces disconnected.");
+            } else if (hasOverlap) {
+                showToast("The shapes overlap! Try cutting different edges.");
+            } else { 
+                
+                // --- SUCCESS TRANSITION: EVOLUTION SPIN & CORE GLOW ---
+                highestUnlockedLevel = Math.max(highestUnlockedLevel, currentLevelIndex + 1);
+                
+                const flash = document.getElementById('flashOverlay');
+                const startRot = currentLevelGroup.rotation.y;
+                const duration = 1500; 
+                const startTime = performance.now();
+                
+                let sparkParticles = [];
+
+                function animateSpin() {
+                    const now = performance.now();
+                    const progress = Math.min((now - startTime) / duration, 1);
+                    
+                    // Rotation
+                    currentLevelGroup.rotation.y = startRot + (Math.pow(progress, 3) * Math.PI * 6); 
+                    
+                    // Interpolate to pure White Glow
+                    const colorVal = 0.26 + (1.0 - 0.26) * Math.pow(progress, 2);
+                    currentShapeMesh.material.color.setRGB(colorVal, colorVal, colorVal);
+                    
+                    // Spawn Sparks while spinning
+                    if (progress < 0.9) { 
+                        for(let i=0; i<3; i++) {
+                            const spark = new THREE.Mesh(
+                                new THREE.BoxGeometry(0.04, 0.04, 0.04), 
+                                new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true})
+                            );
+                            const angle = Math.random() * Math.PI * 2;
+                            const radius = 1 + Math.random();
+                            spark.position.set(Math.cos(angle)*radius, (Math.random()-0.5)*2, Math.sin(angle)*radius);
+                            
+                            spark.userData.vel = new THREE.Vector3(
+                                Math.cos(angle + Math.PI/2)*0.06 + Math.cos(angle)*0.04, 
+                                (Math.random()-0.5)*0.06, 
+                                Math.sin(angle + Math.PI/2)*0.06 + Math.sin(angle)*0.04
+                            );
+                            spark.userData.life = 1.0;
+                            currentLevelGroup.add(spark);
+                            sparkParticles.push(spark);
+                        }
+                    }
+
+                    // Update flying sparks
+                    for(let i=sparkParticles.length-1; i>=0; i--) {
+                        let s = sparkParticles[i];
+                        s.position.add(s.userData.vel);
+                        s.userData.life -= 0.025;
+                        s.material.opacity = s.userData.life;
+                        if(s.userData.life <= 0) {
+                            currentLevelGroup.remove(s);
+                            s.geometry.dispose(); s.material.dispose();
+                            sparkParticles.splice(i, 1);
+                        }
+                    }
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animateSpin);
+                    }
+                }
+                requestAnimationFrame(animateSpin);
+                
+                // Overlay Timeline
+                setTimeout(() => {
+                    flash.style.transition = "opacity 0.2s ease-out";
+                    flash.style.opacity = 1;
+                    
+                    setTimeout(() => {
+                        document.getElementById('successModal').classList.add('show'); 
+                        drawDynamicNet(layoutCoords); 
+
+                        const nextBtn = document.getElementById('nextLevelBtn');
+                        if (currentLevelIndex < GAME_LEVELS.length - 1) nextBtn.style.display = 'block';
+                        else nextBtn.style.display = 'none';
+
+                        flash.style.transition = "opacity 1.2s ease-in"; 
+                        flash.style.opacity = 0;
+
+                        // Strict RGB Confetti Burst
+                        setTimeout(() => {
+                            if (typeof confetti === 'function') {
+                                confetti({
+                                    particleCount: 140,
+                                    spread: 85,
+                                    origin: { y: 0.25 },
+                                    colors: ['#FF0000', '#00FF00', '#0000FF'] // Red, Green, Blue explicitly
+                                });
+                            }
+                        }, 1000);
+
+                    }, 700); 
+                }, duration - 100); 
+            }
+        });
+
+        // --- THE FIX: Clean Up The Glow On Reset ---
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            document.getElementById('successModal').classList.remove('show');
+            
+            // Clear Seam Highlights
+            interactableEdges.forEach(edge => { 
+                edge.userData.isSeam = false; 
+                edge.userData.visualMesh.material.color.setHex(0xffffff); 
+            });
+            seamsPlaced = 0; 
+            
+            // Revert the 3D model's state entirely!
+            if (currentShapeMesh) {
+                currentShapeMesh.material.color.setHex(0x444444); // Back to original gray
+            }
+            if (currentLevelGroup) {
+                currentLevelGroup.rotation.y = 0; // Back to initial rotation
+            }
+
+            updateUI();
+        });
+
+        document.getElementById('nextLevelBtn').addEventListener('click', () => {
+            document.getElementById('successModal').classList.remove('show');
+            loadLevel(currentLevelIndex + 1);
+        });
+
+        // --- 8. INITIALIZE GAME LOOP ---
+        loadLevel(0);
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); } animate();
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }, false);
+    </script>
+</body>
+</html>
