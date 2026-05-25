@@ -11,7 +11,6 @@
         .intro-content h1 { color: #2196F3; font-size: 48px; margin-top: 0; margin-bottom: 20px; text-shadow: 0 0 15px rgba(33, 150, 243, 0.4); letter-spacing: 2px; text-transform: uppercase; }
         .intro-content p { color: #ccc; font-size: 16px; line-height: 1.6; margin-bottom: 30px; }
         
-        /* Styled link for the YouTube video */
         .yt-link { color: #2196F3; text-decoration: none; font-weight: bold; border-bottom: 1px dotted #2196F3; transition: color 0.2s; }
         .yt-link:hover { color: #4DB8FF; border-bottom: 1px solid #4DB8FF; }
 
@@ -54,7 +53,6 @@
         #successModal h2 { color: #4CAF50; font-size: 42px; margin-bottom: 10px; text-shadow: 0 0 15px rgba(76, 175, 80, 0.5); z-index: 210; }
         #successModal p { color: #ccc; margin-bottom: 25px; font-size: 18px; z-index: 210; }
         
-        /* CELEBRATION GIF */
         #celebrationGif { height: 120px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 210; object-fit: cover; }
 
         canvas { background-color: #222; border: 2px solid #555; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 210; }
@@ -120,7 +118,7 @@
             intro.style.opacity = '0';
             setTimeout(() => {
                 intro.style.display = 'none';
-            }, 500); // Matches the CSS transition duration
+            }, 500);
         });
 
         // --- GIF ASSETS ---
@@ -251,7 +249,7 @@
         let graph = {}; 
         let edgeList = []; 
         let sparkParticles = []; 
-        let hoveredEdge = null; // Tracks currently hovered edge
+        let hoveredEdge = null;
 
         // --- 4. RUNTIME SYSTEM ACTIONS ---
         function showToast(msg, color = '#f44336') {
@@ -407,7 +405,6 @@
         window.addEventListener('pointermove', (e) => { 
             if (Math.abs(e.clientX - pX) > 3 || Math.abs(e.clientY - pY) > 3) isDragging = true; 
             
-            // Continuous Raycast for Hover Effects
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
             
@@ -417,18 +414,15 @@
             if (intersects.length > 0) {
                 const hit = intersects[0].object;
                 if (hoveredEdge !== hit) {
-                    // Reset previous hover
                     if (hoveredEdge) {
                         hoveredEdge.userData.visualMesh.material.color.setHex(hoveredEdge.userData.isSeam ? 0xff3333 : 0xffffff);
                     }
                     hoveredEdge = hit;
-                    // Apply new hover distinct color based on state
                     hoveredEdge.userData.visualMesh.material.color.setHex(hoveredEdge.userData.isSeam ? 0xff7777 : 0x4DB8FF);
                     document.body.style.cursor = 'pointer';
                 }
             } else {
                 if (hoveredEdge) {
-                    // Reset styling when cursor leaves edge
                     hoveredEdge.userData.visualMesh.material.color.setHex(hoveredEdge.userData.isSeam ? 0xff3333 : 0xffffff);
                     hoveredEdge = null;
                     document.body.style.cursor = 'default';
@@ -447,7 +441,6 @@
             if (intersects.length > 0) {
                 const hit = intersects[0].object;
                 hit.userData.isSeam = !hit.userData.isSeam;
-                // Keep the hover color applied immediately after toggling
                 hit.userData.visualMesh.material.color.setHex(hit.userData.isSeam ? 0xff7777 : 0x4DB8FF);
                 seamsPlaced += hit.userData.isSeam ? 1 : -1;
                 updateUI();
@@ -466,6 +459,9 @@
         });
 
         // --- 6. 2D SURFACE LAYOUT ALGORITHMS ---
+        // *** FIX: hexagon scaled by 0.5 so each edge = length 1, matching cylinder_side's
+        //     top/bottom edge length of 1. transformPoint has no scaling, so all adjacent
+        //     face types must share a consistent edge length in their local 2D templates. ***
         const H_Y = 1.732051;
         const localFaces2D = {
             'square': {
@@ -480,9 +476,24 @@
                 vertices: [ {x:-1, y:-1}, {x:1, y:-1}, {x:0, y:1.236068} ],
                 edges: { 2:[{x:-1,y:-1},{x:1,y:-1}], 1:[{x:1,y:-1},{x:0,y:1.236068}], 3:[{x:0,y:1.236068},{x:-1,y:-1}] }
             },
+            // Scaled by 0.5 vs original: edges now length 1, matching cylinder_side.
+            // Original had vertices like {x:-1, y:-H_Y} giving edge length 2 — mismatch
+            // caused transformPoint to misplace panels, triggering false overlap errors.
             'hexagon': {
-                vertices: [ {x:-1, y:-H_Y}, {x:1, y:-H_Y}, {x:2, y:0}, {x:1, y:H_Y}, {x:-1, y:H_Y}, {x:-2, y:0} ],
-                edges: { 0:[{x:-1,y:-H_Y}, {x:1,y:-H_Y}], 1:[{x:1,y:-H_Y}, {x:2,y:0}], 2:[{x:2,y:0}, {x:1,y:H_Y}], 3:[{x:1,y:H_Y}, {x:-1,y:H_Y}], 4:[{x:-1,y:H_Y}, {x:-2,y:0}], 5:[{x:-2,y:0}, {x:-1,y:-H_Y}] }
+                vertices: [
+                    {x:-0.5, y:-H_Y/2}, {x:0.5, y:-H_Y/2},
+                    {x:1,    y:0},
+                    {x:0.5,  y:H_Y/2},  {x:-0.5, y:H_Y/2},
+                    {x:-1,   y:0}
+                ],
+                edges: {
+                    0: [{x:-0.5, y:-H_Y/2}, {x:0.5, y:-H_Y/2}],
+                    1: [{x:0.5,  y:-H_Y/2}, {x:1,   y:0}],
+                    2: [{x:1,    y:0},       {x:0.5, y:H_Y/2}],
+                    3: [{x:0.5,  y:H_Y/2},  {x:-0.5,y:H_Y/2}],
+                    4: [{x:-0.5, y:H_Y/2},  {x:-1,  y:0}],
+                    5: [{x:-1,   y:0},       {x:-0.5,y:-H_Y/2}]
+                }
             }
         };
 
@@ -504,12 +515,20 @@
                     if ((ccw(a1,b1,b2) !== ccw(a2,b1,b2)) && (ccw(a1,a2,b1) !== ccw(a1,a2,b2))) return true;
                 }
             }
+            // Check center of A inside B
             let cx = 0, cy = 0; polyA.forEach(p => { cx+=p.x; cy+=p.y }); let centerA = { x: cx/polyA.length, y: cy/polyA.length };
             let inside = false;
             for (let i = 0, j = polyB.length - 1; i < polyB.length; j = i++) {
                 if (((polyB[i].y > centerA.y) !== (polyB[j].y > centerA.y)) && (centerA.x < (polyB[j].x - polyB[i].x) * (centerA.y - polyB[i].y) / (polyB[j].y - polyB[i].y) + polyB[i].x)) inside = !inside;
             }
-            return inside;
+            if (inside) return true;
+            // Also check center of B inside A (catches case where B is fully inside A)
+            let cx2 = 0, cy2 = 0; polyB.forEach(p => { cx2+=p.x; cy2+=p.y }); let centerB = { x: cx2/polyB.length, y: cy2/polyB.length };
+            let inside2 = false;
+            for (let i = 0, j = polyA.length - 1; i < polyA.length; j = i++) {
+                if (((polyA[i].y > centerB.y) !== (polyA[j].y > centerB.y)) && (centerB.x < (polyA[j].x - polyA[i].x) * (centerB.y - polyA[i].y) / (polyA[j].y - polyA[i].y) + polyA[i].x)) inside2 = !inside2;
+            }
+            return inside2;
         }
 
         function drawDynamicNet(layoutCoords) {
@@ -590,7 +609,6 @@
                 showToast("The shapes overlap! Try cutting different edges.");
             } else { 
                 
-                // --- SUCCESS TRANSITION: EVOLUTION SPIN & CORE GLOW ---
                 highestUnlockedLevel = Math.max(highestUnlockedLevel, currentLevelIndex + 1);
                 const flash = document.getElementById('flashOverlay'); const startRot = currentLevelGroup.rotation.y;
                 const duration = 1500; const startTime = performance.now();
