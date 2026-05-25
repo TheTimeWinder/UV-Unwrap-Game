@@ -5,6 +5,19 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
+        /* INTRO / START SCREEN */
+        #introScreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #1a1a1a; z-index: 1000; display: flex; justify-content: center; align-items: center; text-align: center; transition: opacity 0.5s ease; }
+        .intro-content { background: #2a2a2a; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); max-width: 600px; border: 2px solid #333; }
+        .intro-content h1 { color: #2196F3; font-size: 48px; margin-top: 0; margin-bottom: 20px; text-shadow: 0 0 15px rgba(33, 150, 243, 0.4); letter-spacing: 2px; text-transform: uppercase; }
+        .intro-content p { color: #ccc; font-size: 16px; line-height: 1.6; margin-bottom: 30px; }
+        
+        /* Styled link for the YouTube video */
+        .yt-link { color: #2196F3; text-decoration: none; font-weight: bold; border-bottom: 1px dotted #2196F3; transition: color 0.2s; }
+        .yt-link:hover { color: #4DB8FF; border-bottom: 1px solid #4DB8FF; }
+
+        #startGameBtn { background-color: #4CAF50; color: white; padding: 15px 30px; font-size: 20px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4); width: 100%; max-width: 300px; margin: 0 auto; display: block; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        #startGameBtn:hover { background-color: #45a049; transform: translateY(-2px); }
+
         /* SLEEK SIDEBAR */
         #sidebar { position: absolute; top: 0; left: 0; width: 320px; height: 100vh; background-color: #2a2a2a; padding: 25px; box-sizing: border-box; display: flex; flex-direction: column; box-shadow: 4px 0 15px rgba(0,0,0,0.5); z-index: 10; }
         .title { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #4CAF50; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
@@ -40,6 +53,10 @@
         #successModal.show { display: flex !important; }
         #successModal h2 { color: #4CAF50; font-size: 42px; margin-bottom: 10px; text-shadow: 0 0 15px rgba(76, 175, 80, 0.5); z-index: 210; }
         #successModal p { color: #ccc; margin-bottom: 25px; font-size: 18px; z-index: 210; }
+        
+        /* CELEBRATION GIF */
+        #celebrationGif { height: 120px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 210; object-fit: cover; }
+
         canvas { background-color: #222; border: 2px solid #555; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 210; }
         
         .modal-controls { display: flex; gap: 15px; z-index: 210; }
@@ -50,10 +67,21 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
     
+    <div id="introScreen">
+        <div class="intro-content">
+            <h1>UV Unwrapper</h1>
+            <p>
+                <strong>Click and drag</strong> to rotate the shape. <strong>Scroll</strong> to zoom.<br><br>
+                This game reinforces the core rule of 3D UV mapping: cutting just enough seams to flatten a 3D model without stretching or overlapping.<br><br>
+                Click the white edges to cut a seam. Cut exactly the required amount of seams to unfold the shape into a flat 2D net! Want to master the theory? Check out <a class="yt-link" href="https://youtu.be/yJe7aPIdJxg" target="_blank">How To Not Suck at UV Unwrapping</a> by Art of Pilgrim.
+            </p>
+            <button id="startGameBtn">START GAME</button>
+        </div>
+    </div>
+
     <div id="flashOverlay"></div>
     <div id="toast">Error Message Here</div>
 
@@ -77,6 +105,7 @@
     <div id="successModal">
         <h2>PERFECT UNFOLD!</h2>
         <p>Your seams formed a valid, flat 2D net.</p>
+        <img id="celebrationGif" src="" alt="Celebration!" />
         <canvas id="netCanvas" width="600" height="500"></canvas>
         <div class="modal-controls">
             <button class="modal-btn" id="closeModalBtn">Reset Shape</button>
@@ -85,6 +114,25 @@
     </div>
 
     <script>
+        // --- START GAME DISMISS LOGIC ---
+        document.getElementById('startGameBtn').addEventListener('click', () => {
+            const intro = document.getElementById('introScreen');
+            intro.style.opacity = '0';
+            setTimeout(() => {
+                intro.style.display = 'none';
+            }, 500); // Matches the CSS transition duration
+        });
+
+        // --- GIF ASSETS ---
+        const CELEBRATION_GIFS = [
+            "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExd29xNXBpb252czhvYjJjMHdsOXZoZmF3MXQ0cWN3OXlubm01bmpsMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/s2qXK8wAvkHTO/giphy.gif",
+            "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdXd1M2liZ3FqOWtlMnhueWRoaGJkdnZuNGpwMmlzamNldWF4ZDltaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/PXCqTNXuGlNpHABHH4/giphy.gif",
+            "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExaHExZ3lncm5hOHYxczB5dmkyaWs4NTdtN2I0cGYxcHd6eWxkaHRzNCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/idFxmiV2dayJEqzXaW/giphy.gif",
+            "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExMmUzNWUwMnlxNW1sbGNsczV5c3N5d3E1OWx4OWdnaXlxd2FmN3VlcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/1398cRUI5r3aww/giphy.gif",
+            "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbjFwZjZjYWpmaWsyYjhzOXFpNTVvOHRhMTJibmRuNDc4bGR2YWNkNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/MVDPX3gaKFPuo/giphy.gif",
+            "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzV1cXliNXZvZDQ0NW95ZmZ3Z2FidXNrZ3JucmM0YWdweWR3OGVpZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/rXQ5Aex4FZiej6sKTZ/giphy.gif"
+        ];
+
         // --- 1. CORE ENGINE SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -182,7 +230,7 @@
                     
                     for(let i=0; i<N; i++) {
                         faces.push({
-                            id: i+2, type: 'square',
+                            id: i+2, type: 'cylinder_side',
                             edges: { 0: topE[i], 3: mid(topV[(i+1)%N], botV[(i+1)%N]), 2: botE[i], 1: mid(botV[i], topV[i]) }
                         });
                     }
@@ -202,6 +250,8 @@
         let requiredSeams = 0;
         let graph = {}; 
         let edgeList = []; 
+        let sparkParticles = []; 
+        let hoveredEdge = null; // Tracks currently hovered edge
 
         // --- 4. RUNTIME SYSTEM ACTIONS ---
         function showToast(msg, color = '#f44336') {
@@ -258,7 +308,9 @@
             });
             visualOnlyEdges.forEach(mesh => { mesh.geometry.dispose(); mesh.material.dispose(); });
             
-            interactableEdges = []; visualOnlyEdges = []; seamsPlaced = 0; graph = {}; edgeList = [];
+            interactableEdges = []; visualOnlyEdges = []; seamsPlaced = 0; graph = {}; edgeList = []; sparkParticles = [];
+            hoveredEdge = null; 
+            document.body.style.cursor = 'default';
             
             currentLevelGroup = new THREE.Group();
             currentLevelGroup.position.set(-1, 0, 0); 
@@ -349,18 +401,54 @@
         // --- 5. POINTER RAYCAST INTERACTION ---
         const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
         let isDragging = false; let pX = 0; let pY = 0;
+        
         window.addEventListener('pointerdown', (e) => { isDragging = false; pX = e.clientX; pY = e.clientY; });
-        window.addEventListener('pointermove', (e) => { if (Math.abs(e.clientX - pX) > 3 || Math.abs(e.clientY - pY) > 3) isDragging = true; });
+        
+        window.addEventListener('pointermove', (e) => { 
+            if (Math.abs(e.clientX - pX) > 3 || Math.abs(e.clientY - pY) > 3) isDragging = true; 
+            
+            // Continuous Raycast for Hover Effects
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactableEdges);
+            
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                if (hoveredEdge !== hit) {
+                    // Reset previous hover
+                    if (hoveredEdge) {
+                        hoveredEdge.userData.visualMesh.material.color.setHex(hoveredEdge.userData.isSeam ? 0xff3333 : 0xffffff);
+                    }
+                    hoveredEdge = hit;
+                    // Apply new hover distinct color based on state
+                    hoveredEdge.userData.visualMesh.material.color.setHex(hoveredEdge.userData.isSeam ? 0xff7777 : 0x4DB8FF);
+                    document.body.style.cursor = 'pointer';
+                }
+            } else {
+                if (hoveredEdge) {
+                    // Reset styling when cursor leaves edge
+                    hoveredEdge.userData.visualMesh.material.color.setHex(hoveredEdge.userData.isSeam ? 0xff3333 : 0xffffff);
+                    hoveredEdge = null;
+                    document.body.style.cursor = 'default';
+                }
+            }
+        });
         
         window.addEventListener('pointerup', (e) => {
             if (e.target.tagName === 'BUTTON' || isDragging) return; 
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; 
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(interactableEdges);
+            
             if (intersects.length > 0) {
                 const hit = intersects[0].object;
                 hit.userData.isSeam = !hit.userData.isSeam;
-                hit.userData.visualMesh.material.color.setHex(hit.userData.isSeam ? 0xff3333 : 0xffffff);
+                // Keep the hover color applied immediately after toggling
+                hit.userData.visualMesh.material.color.setHex(hit.userData.isSeam ? 0xff7777 : 0x4DB8FF);
                 seamsPlaced += hit.userData.isSeam ? 1 : -1;
                 updateUI();
             }
@@ -371,6 +459,8 @@
                 edge.userData.isSeam = false;
                 edge.userData.visualMesh.material.color.setHex(0xffffff);
             });
+            hoveredEdge = null;
+            document.body.style.cursor = 'default';
             seamsPlaced = 0;
             updateUI();
         });
@@ -381,6 +471,10 @@
             'square': {
                 vertices: [ {x:1, y:1}, {x:-1, y:1}, {x:-1, y:-1}, {x:1, y:-1} ],
                 edges: { 0:[{x:1,y:1},{x:-1,y:1}], 3:[{x:-1,y:1},{x:-1,y:-1}], 2:[{x:-1,y:-1},{x:1,y:-1}], 1:[{x:1,y:-1},{x:1,y:1}] }
+            },
+            'cylinder_side': {
+                vertices: [ {x:0.5, y:1}, {x:-0.5, y:1}, {x:-0.5, y:-1}, {x:0.5, y:-1} ],
+                edges: { 0:[{x:0.5,y:1},{x:-0.5,y:1}], 3:[{x:-0.5,y:1},{x:-0.5,y:-1}], 2:[{x:-0.5,y:-1},{x:0.5,y:-1}], 1:[{x:0.5,y:-1},{x:0.5,y:1}] }
             },
             'triangle': {
                 vertices: [ {x:-1, y:-1}, {x:1, y:-1}, {x:0, y:1.236068} ],
@@ -503,8 +597,6 @@
                 const startRot = currentLevelGroup.rotation.y;
                 const duration = 1500; 
                 const startTime = performance.now();
-                
-                let sparkParticles = [];
 
                 function animateSpin() {
                     const now = performance.now();
@@ -522,7 +614,7 @@
                         for(let i=0; i<3; i++) {
                             const spark = new THREE.Mesh(
                                 new THREE.BoxGeometry(0.04, 0.04, 0.04), 
-                                new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true})
+                                new MeshBasicMaterial({color: 0xffffff, transparent: true})
                             );
                             const angle = Math.random() * Math.PI * 2;
                             const radius = 1 + Math.random();
@@ -564,6 +656,10 @@
                     flash.style.opacity = 1;
                     
                     setTimeout(() => {
+                        // Select a random celebration GIF
+                        const randomGif = CELEBRATION_GIFS[Math.floor(Math.random() * CELEBRATION_GIFS.length)];
+                        document.getElementById('celebrationGif').src = randomGif;
+
                         document.getElementById('successModal').classList.add('show'); 
                         drawDynamicNet(layoutCoords); 
 
@@ -573,18 +669,6 @@
 
                         flash.style.transition = "opacity 1.2s ease-in"; 
                         flash.style.opacity = 0;
-
-                        // Strict RGB Confetti Burst
-                        setTimeout(() => {
-                            if (typeof confetti === 'function') {
-                                confetti({
-                                    particleCount: 140,
-                                    spread: 85,
-                                    origin: { y: 0.25 },
-                                    colors: ['#FF0000', '#00FF00', '#0000FF'] // Red, Green, Blue explicitly
-                                });
-                            }
-                        }, 1000);
 
                     }, 700); 
                 }, duration - 100); 
@@ -609,6 +693,16 @@
             if (currentLevelGroup) {
                 currentLevelGroup.rotation.y = 0; // Back to initial rotation
             }
+
+            // CLEAN UP SPARKS
+            sparkParticles.forEach(spark => {
+                currentLevelGroup.remove(spark);
+                if (spark.geometry) spark.geometry.dispose();
+                if (spark.material) spark.material.dispose();
+            });
+            sparkParticles = [];
+            hoveredEdge = null;
+            document.body.style.cursor = 'default';
 
             updateUI();
         });
